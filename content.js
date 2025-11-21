@@ -555,10 +555,15 @@
     //   element.dataset.albaLabeled = 'skip';
     //   return;
     // }
-    const images = countContentImages(element);
-    console.log("Images : ", images);
-    const modality = images > 0 ? 'image' : detectModality(text);
-    const estimate = estimateImpact({ text, modality, images });
+
+    // Get user's prompt to detect if they requested image generation
+    const userPrompt = getUserPromptForResponse(element);
+    const promptModality = detectModality(userPrompt || text);
+
+    // Only count images if the prompt requested image generation
+    const images = promptModality === 'image' ? countAIGeneratedImages(element) : 0;
+    console.log("Detected modality:", promptModality, "AI-generated images found:", images);
+    const estimate = estimateImpact({ text: userPrompt || text, modality: promptModality, images });
     if (!estimate || !estimate.Wh) {
       element.dataset.albaLabeled = 'skip';
       return;
@@ -1288,16 +1293,53 @@
     });
   }
 
-  function countContentImages(container) {
+  function getUserPromptForResponse(responseElement) {
+    // Try to find the corresponding user message that triggered this response
+    // Look for previous sibling or parent structure depending on the site
+    let current = responseElement;
+    while (current && current.previousElementSibling) {
+      current = current.previousElementSibling;
+      // Look for user message indicators
+      const userMessage = current.querySelector('[data-message-author-role="user"]') ||
+                         current.querySelector('[class*="user"]');
+      if (userMessage || current.matches('[data-message-author-role="user"]')) {
+        const promptText = (userMessage || current).innerText || '';
+        if (promptText.trim()) {
+          console.log('[Alba] Found user prompt:', promptText.substring(0, 100));
+          return promptText;
+        }
+      }
+    }
+    return '';
+  }
+
+  function countAIGeneratedImages(container) {
+    // Count only images that appear to be AI-generated, not UI icons
     if (!container) return 0;
     return Array.from(container.querySelectorAll('img')).filter((img) => {
-      if (img.closest('button, svg, nav')) return false;
+      // Exclude images in buttons, navigation, or SVG containers (likely UI elements)
+      if (img.closest('button, svg, nav, header, footer')) return false;
+
+      // Exclude hidden images
       if (img.getAttribute('aria-hidden') === 'true') return false;
-      const alt = (img.getAttribute('alt') || '').trim();
+
+      // Exclude small icons (weather icons, UI decorations, etc.)
+      const width = img.naturalWidth || img.width || 0;
+      const height = img.naturalHeight || img.height || 0;
+      if (width < 100 || height < 100) return false;
+
+      // Exclude images with icon-related classes or data attributes
+      const className = img.className || '';
+      const src = img.src || '';
+      if (className.match(/icon|emoji|avatar|logo/i)) return false;
+      if (src.match(/icon|emoji|avatar|logo/i)) return false;
+
+      // Check for presentation role - these are usually decorative
       const role = (img.getAttribute('role') || '').toLowerCase();
-      if (!alt && (role === 'presentation' || role === 'img')) {
-        return (img.naturalWidth || img.width || 0) > 64 || (img.naturalHeight || img.height || 0) > 64;
-      }
+      const alt = (img.getAttribute('alt') || '').trim();
+      if (role === 'presentation' && !alt) return false;
+
+      // If we've passed all filters, this is likely an AI-generated image
       return true;
     }).length;
   }
