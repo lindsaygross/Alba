@@ -1,11 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Alba",
-  "short_name": "Alba",
-  "description": "Track the environmental impact of your AI usage. Real-time energy, carbon, and water estimates for ChatGPT, Claude, Gemini & more.",
-  "version": "1.0.0",
-  "author": "Alba Team",
-  "homepage_url": "https://github.com/lindsaygross/Alba",
+  "name": "alba",
+  "description": "Privacy-first AI impact estimator with prompt optimizer and daily footprint tracker.",
+  "version": "0.1.0",
   "permissions": ["storage"],
   "host_permissions": [
     "https://alba-ten.vercel.app/*"

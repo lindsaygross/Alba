@@ -7,7 +7,6 @@
   "scripts": {
     "start": "node api/server.js",
     "dev": "vercel dev",
-    "build": "bash build-extension.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
