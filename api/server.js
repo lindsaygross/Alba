@@ -10,7 +10,23 @@ const app = express();
 app.use(cors()); // local dev; tighten in prod
 app.use(bodyParser.json());
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// GitHub Marketplace AI Models configuration
+const GITHUB_AI_BASE_URL = "https://models.inference.ai.azure.com";
+
+// Detect which API to use based on available environment variables
+function createAIClient() {
+  if (process.env.GITHUB_TOKEN) {
+    // Use GitHub Marketplace AI Models
+    return new OpenAI({
+      baseURL: GITHUB_AI_BASE_URL,
+      apiKey: process.env.GITHUB_TOKEN
+    });
+  }
+  // Fallback to OpenAI API
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
+const client = createAIClient();
 
 const OPTIMIZER_SYSTEM = `You are an expert prompt engineer.You compress prompts to use minimum tokens. Keep EXACT same meaning but remove ALL unnecessary words.
 

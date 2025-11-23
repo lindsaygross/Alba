@@ -1,5 +1,21 @@
 import OpenAI from "openai";
 
+// GitHub Marketplace AI Models configuration
+const GITHUB_AI_BASE_URL = "https://models.inference.ai.azure.com";
+
+// Detect which API to use based on available environment variables
+function createAIClient() {
+  if (process.env.GITHUB_TOKEN) {
+    // Use GitHub Marketplace AI Models
+    return new OpenAI({
+      baseURL: GITHUB_AI_BASE_URL,
+      apiKey: process.env.GITHUB_TOKEN
+    });
+  }
+  // Fallback to OpenAI API
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
+
 const WRAPPED_SYSTEM = `You are Alba's climate storyteller. Given daily energy (Wh), carbon (gCO2), and water (mL) totals from AI usage plus estimated savings, craft a recap that celebrates resources avoided. Respond ONLY with JSON matching this schema:
 {
   "headline": string,
@@ -146,7 +162,7 @@ export default async function handler(req, res) {
   const savings = estimateSavingsFromUsage(metrics, settings);
 
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const client = createAIClient();
     const promptPayload = JSON.stringify({ dateLabel, totals: metrics, savings });
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",

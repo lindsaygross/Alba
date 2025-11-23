@@ -1,0 +1,179 @@
+name: Build Alba Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Get version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(jq -r .version package.json)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update manifest version
+        if: github.event.inputs.version != ''
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          jq ".version = \"$VERSION\"" manifest.json > manifest.json.tmp
+          mv manifest.json.tmp manifest.json
+          echo "Updated manifest.json to version $VERSION"
+
+      - name: Verify extension structure
+        run: |
+          echo "Checking extension files..."
+          if [ ! -f "manifest.json" ]; then
+            echo "Error: manifest.json not found"
+            exit 1
+          fi
+
+          if [ ! -f "icons/icon16.png" ] || [ ! -f "icons/icon48.png" ] || [ ! -f "icons/icon128.png" ]; then
+            echo "Error: Required icon files not found"
+            exit 1
+          fi
+
+          echo "Extension structure verified"
+
+      - name: Test API with GitHub AI Models
+        run: node scripts/test-ai-api.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create extension package
+        run: |
+          mkdir -p build/extension
+
+          # Copy extension files
+          cp manifest.json build/extension/
+          cp content.js build/extension/
+          cp popup.html build/extension/
+          cp popup.js build/extension/
+          cp styles.css build/extension/
+          cp energyConfig.js build/extension/
+          cp -r icons build/extension/
+
+          # Create ZIP package
+          cd build/extension
+          zip -r ../../alba-extension-v${{ steps.version.outputs.version }}.zip \
+            manifest.json \
+            content.js \
+            popup.html \
+            popup.js \
+            styles.css \
+            energyConfig.js \
+            icons/ \
+            -x "*.DS_Store"
+          cd ../..
+
+          echo "Package created: alba-extension-v${{ steps.version.outputs.version }}.zip"
+          ls -lh alba-extension-v${{ steps.version.outputs.version }}.zip
+
+      - name: Verify ZIP contents
+        run: |
+          unzip -l alba-extension-v${{ steps.version.outputs.version }}.zip
+
+          FILE_COUNT=$(unzip -l alba-extension-v${{ steps.version.outputs.version }}.zip | grep -c "^-" || echo "0")
+          echo "Total files in package: $FILE_COUNT"
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          ## Alba v${{ steps.version.outputs.version }}
+
+          ### Chrome Extension
+
+          **What's New:**
+          - Environmental transparency for AI usage
+          - Real-time energy, carbon, and water usage estimates
+          - Prompt optimization powered by GitHub AI Models
+
+          **Installation:**
+          1. Download `alba-extension-v${{ steps.version.outputs.version }}.zip`
+          2. Extract the ZIP file
+          3. Open Chrome and go to `chrome://extensions/`
+          4. Enable "Developer mode"
+          5. Click "Load unpacked" and select the extracted folder
+
+          **For Chrome Web Store submission:**
+          Use `alba-extension-v${{ steps.version.outputs.version }}.zip` directly
+
+          ---
+
+          **Documentation:** https://github.com/lindsaygross/Alba/blob/main/README.md
+          EOF
+
+          cat release-notes.md
+
+      - name: Upload extension package
+        uses: actions/upload-artifact@v4
+        with:
+          name: alba-extension-v${{ steps.version.outputs.version }}
+          path: build/extension/
+          retention-days: 90
+
+      - name: Upload extension ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: alba-extension-v${{ steps.version.outputs.version }}-zip
+          path: alba-extension-v${{ steps.version.outputs.version }}.zip
+          retention-days: 90
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            alba-extension-v${{ steps.version.outputs.version }}.zip
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package summary
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Packages Created:" >> $GITHUB_STEP_SUMMARY
+          echo "- Alba Extension: \`alba-extension-v${{ steps.version.outputs.version }}\` (artifact)" >> $GITHUB_STEP_SUMMARY
+          echo "- Alba Extension ZIP: \`alba-extension-v${{ steps.version.outputs.version }}.zip\` (for releases)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### File Sizes:" >> $GITHUB_STEP_SUMMARY
+          ls -lh alba-extension-v${{ steps.version.outputs.version }}.zip | awk '{print "- Extension ZIP: " $5}' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### For Chrome Web Store Submission:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download the \`alba-extension-v${{ steps.version.outputs.version }}\` artifact" >> $GITHUB_STEP_SUMMARY
+          echo "2. Extract the downloaded zip to get the extension folder" >> $GITHUB_STEP_SUMMARY
+          echo "3. Re-zip the extension folder contents (manifest.json must be at root)" >> $GITHUB_STEP_SUMMARY
+          echo "4. Upload to Chrome Web Store Developer Dashboard" >> $GITHUB_STEP_SUMMARY
