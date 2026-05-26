@@ -6,7 +6,7 @@
   "homepage_url": "https://lindsaygross.github.io/Alba/",
   "permissions": ["storage"],
   "host_permissions": [
-    "https://YOUR-PROXY.example.workers.dev/*"
+    "https://alba-ai-proxy.lindsaygross32.workers.dev/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

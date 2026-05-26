@@ -14,7 +14,7 @@
 // Replace the placeholder below with your real worker URL, e.g.
 //   https://alba-ai-proxy.<your-subdomain>.workers.dev
 // ─────────────────────────────────────────────────────────────────────────────
-const PROXY_URL = 'https://YOUR-PROXY.example.workers.dev';
+const PROXY_URL = 'https://alba-ai-proxy.lindsaygross32.workers.dev';
 // LOCAL TESTING: comment out the line above and use this against `wrangler dev`:
 // const PROXY_URL = 'http://127.0.0.1:8787';
 
