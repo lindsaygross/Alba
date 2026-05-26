@@ -56,9 +56,9 @@ Celebrate your environmental wins with shareable recap cards showing:
 
 #### 🔒 Privacy-First Architecture
 Your data stays yours:
-- **No backend servers** — all calculations happen locally in your browser
-- **No data collection** — we never see your prompts or usage patterns
-- **Optional AI features** — advanced optimization is opt-in and uses GitHub Models API
+- **Local-first** — impact estimates and the local optimizer run entirely in your browser
+- **No data collection** — no analytics; your usage data stays on your device
+- **No API keys in the extension** — optional AI features (the AI optimizer and Wrapped) route through Alba's server-side proxy to GitHub Models, so no token ever ships to users
 - **Open source** — full transparency with publicly available code
 
 #### ⚙️ Fully Configurable
@@ -123,7 +123,7 @@ All methodology and sources are documented in the project's GitHub repository fo
 
 **Alba respects your privacy absolutely:**
 - ✅ No telemetry or analytics
-- ✅ No cloud services or external servers (except optional AI optimization via GitHub Models)
+- ✅ Impact estimates and the local optimizer run on-device; optional AI features route through Alba's server-side proxy to GitHub Models, with no API keys shipped in the extension
 - ✅ No login required
 - ✅ All usage data stored locally in your browser
 - ✅ You control all data — export or delete anytime

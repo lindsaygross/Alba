@@ -2,14 +2,13 @@
 /**
  * Alba Extension Build Script
  *
- * Injects the GitHub PAT from environment variable and creates a distributable ZIP.
+ * Copies the extension files into dist/ and creates a distributable ZIP.
+ *
+ * No secrets are injected: AI calls go through a server-side proxy (see proxy/),
+ * so no token ever ships inside the extension.
  *
  * Usage:
- *   GITHUB_TOKEN=your_pat node scripts/build.js
- *
- * Or in GitHub Actions:
- *   env:
- *     GITHUB_TOKEN: ${{ secrets.GITHUB_PAT }}
+ *   node scripts/build.cjs
  */
 
 const fs = require('fs');
@@ -18,7 +17,6 @@ const { execSync } = require('child_process');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
-const AI_CLIENT_FILE = 'aiClient.js';
 
 // Files to include in the extension package
 const EXTENSION_FILES = [
@@ -71,29 +69,6 @@ function copyFile(src, dest) {
   log(`Copied ${src}`);
 }
 
-function injectToken() {
-  const token = process.env.GITHUB_TOKEN;
-
-  if (!token) {
-    log('WARNING: GITHUB_TOKEN not set. AI features will be disabled.');
-    return;
-  }
-
-  const aiClientPath = path.join(DIST_DIR, AI_CLIENT_FILE);
-
-  if (!fs.existsSync(aiClientPath)) {
-    error(`${AI_CLIENT_FILE} not found in dist directory`);
-  }
-
-  let content = fs.readFileSync(aiClientPath, 'utf8');
-  // Escape special characters to prevent breaking JS string literals
-  const safeToken = token.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  content = content.replace("'__GITHUB_TOKEN__'", `'${safeToken}'`);
-  fs.writeFileSync(aiClientPath, content);
-
-  log('Injected GitHub token into aiClient.js');
-}
-
 function createZip() {
   const zipName = 'alba-extension.zip';
   const zipPath = path.join(DIST_DIR, zipName);
@@ -136,11 +111,7 @@ function main() {
     copyFile(file);
   }
 
-  // Step 3: Inject GitHub token
-  log('Injecting GitHub token...');
-  injectToken();
-
-  // Step 4: Create ZIP for distribution
+  // Step 3: Create ZIP for distribution
   log('Creating distribution ZIP...');
   const zipPath = createZip();
 

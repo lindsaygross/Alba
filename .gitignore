@@ -1,3 +1,8 @@
+# Cloudflare Worker local secrets / state (never commit the proxy token)
+proxy/.dev.vars
+.dev.vars
+.wrangler/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

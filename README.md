@@ -16,21 +16,22 @@ If you use ALBA in your research or work, please cite it using the following DOI
 You can cite all versions by using the DOI [10.5281/zenodo.18675123](https://doi.org/10.5281/zenodo.18675123). This DOI represents all versions and will always resolve to the latest one.
 ## Highlights
 - **Real-time footprint labels** – as you type, Alba estimates watt-hours, grams CO₂, and water milliliters based on model size, region, and modality.
-- **Inline prompt optimizer** – local heuristics trim filler immediately; optional AI optimization (via GitHub Models) proposes a compressed rewrite showing % savings before you accept.
+- **Inline prompt optimizer** – local heuristics trim filler immediately; optional AI optimization (via Alba's server-side proxy to GitHub Models) proposes a compressed rewrite showing % savings before you accept.
 - **Floating dashboard + popup** – a widget and browser popup show "Today" vs "This chat," compare against yesterday, export CSV, and reset totals.
 - **Spotify-style "Wrapped"** – on-demand recap cards celebrate the energy, carbon, and water you avoided.
 - **Configurable methodology** – edit `energyConfig.js` to adjust model profiles, modalities, baselines, or default settings.
-- **No backend required** – the extension calls GitHub Models API directly (token injected at build time).
+- **No API keys in the extension** – AI features call a lightweight server-side proxy (a Cloudflare Worker) that holds the GitHub Models token as a server secret; no token or key ships to users. Impact estimates and the local optimizer still run entirely on-device.
 
 ## Repository Layout
 | Path | Purpose |
 | --- | --- |
 | `content.js` | Main content script that injects impact labels, optimizer UI, widget, and wrapped summary. |
-| `aiClient.js` | Direct GitHub Models API client for optimization and wrapped features. |
+| `aiClient.js` | Calls the Alba proxy for optimization and wrapped features (no token; falls back to local-only when the proxy is unset or unreachable). |
+| `proxy/` | Cloudflare Worker proxy that holds the GitHub Models token as a server secret and forwards the `optimize`/`wrapped` requests. |
 | `energyConfig.js` | Central coefficients, model profiles, regional factors, and default settings. |
 | `popup.html`, `popup.js`, `styles.css` | Browser popup for toggles, summaries, CSV export, and theming. |
-| `manifest.json` | Chrome extension manifest (MV3) targeting major AI chat domains. |
-| `scripts/build.cjs` | Build script that injects GitHub PAT and creates distribution ZIP. |
+| `manifest.json` | Chrome extension manifest (MV3) targeting major AI chat domains; lists the proxy URL in `host_permissions`. |
+| `scripts/build.cjs` | Build script that copies the extension files and creates the distribution ZIP (no secrets injected). |
 | `.github/workflows/` | GitHub Actions workflow for automated builds. |
 
 ## Quick Start
@@ -47,12 +48,11 @@ You can cite all versions by using the DOI [10.5281/zenodo.18675123](https://doi
 git clone https://github.com/lindsaygross/Alba.git
 cd Alba
 
-# Build (without AI features)
+# Build the extension (no secrets needed — AI calls go through the proxy)
 npm run build
-
-# Or build with AI features enabled
-GITHUB_TOKEN=your_github_pat npm run build
 ```
+
+AI features (the AI optimizer and Eco Wrapped) require the `PROXY_URL` in `aiClient.js` to point at a deployed Alba proxy. See `proxy/README.md` to deploy the Cloudflare Worker and set its `GITHUB_MODELS_TOKEN` secret. With no reachable proxy, the extension silently falls back to local-only behavior.
 
 ### Load the Extension
 1. Navigate to `chrome://extensions`
@@ -77,6 +77,9 @@ Edit `energyConfig.js` to adjust:
 ### Optimizer Behavior
 Toggle `remoteOptimizer` in the popup settings to enable/disable AI-powered optimization.
 
+### AI Proxy
+The extension never holds an API key. When the AI optimizer or Eco Wrapped is used, `aiClient.js` POSTs a constrained request (`optimize` or `wrapped`) to the proxy URL in its `PROXY_URL` constant. The proxy — a Cloudflare Worker in `proxy/` — holds the GitHub Models token as a server secret, owns the system prompts, and forwards the request to GitHub Models. To run your own, deploy the worker per `proxy/README.md` and point `PROXY_URL` at it.
+
 ### Adding New Sites
 Extend the `SITE_CONFIGS` array in `content.js` with new host patterns and selectors.
 
@@ -86,18 +89,22 @@ Extend the `SITE_CONFIGS` array in `content.js` with new host patterns and selec
 The workflow automatically builds the extension on push to `main`:
 1. Checks out code
 2. Installs dependencies
-3. Injects GitHub PAT from `BUILD_CACHE` environment secret
-4. Creates `dist/` folder and ZIP artifact
+3. Creates `dist/` folder and ZIP artifact
 
-### Setting Up Secrets
+No build-time secrets are involved — the token lives only in the proxy, never in the build.
+
+### Deploying the AI Proxy
+AI features are powered by the Cloudflare Worker in `proxy/`. To set it up:
 1. Create a GitHub PAT with Models access
-2. Go to repo Settings → Environments → Production
-3. Add secret: `BUILD_CACHE` = your PAT
+2. Deploy the worker and set its secret: `wrangler secret put GITHUB_MODELS_TOKEN`
+3. Point `PROXY_URL` in `aiClient.js` (and `host_permissions` in `manifest.json`) at the deployed worker URL
+
+See `proxy/README.md` for full deployment steps.
 
 ## Troubleshooting
 - **No UI appears**: Confirm the tab matches `manifest.json` domains and extension is enabled in popup.
-- **Optimizer not working**: Check that AI features were enabled at build time (PAT injected).
-- **"AI client not configured"**: The build didn't have a GitHub PAT – AI features use local fallback.
+- **Optimizer not working**: Confirm `PROXY_URL` in `aiClient.js` points at a reachable proxy and that the worker's `GITHUB_MODELS_TOKEN` secret is set.
+- **"Proxy URL not configured"**: `PROXY_URL` is still the placeholder – AI features use the local fallback until you point it at a deployed proxy.
 
 ## License
 ISC – see `package.json` for details.

@@ -1,6 +1,6 @@
 # Privacy Policy for Alba
 
-**Last Updated:** November 23, 2024
+**Last Updated:** May 26, 2026
 
 ## Overview
 
@@ -16,11 +16,13 @@ Alba was built from the ground up with privacy as a core principle. We believe t
 
 Alba **does not collect, transmit, or store** any of the following:
 
-- Your AI prompts or conversations
+- Your AI conversations or chat history
 - Your browsing history
 - Your personal information
 - Your usage patterns or analytics
-- Any data on external servers
+- Any data on external servers (Alba runs no analytics backend and stores nothing about you on a server)
+
+The one exception is the optional, opt-in AI features described under **How Alba Works** below: when you use the AI optimizer, the single prompt you choose to optimize is sent to the Alba proxy; when you generate an Eco Wrapped recap, only your aggregate daily totals are sent. Your broader conversations and chat history are never transmitted.
 
 ### What Is Stored Locally
 
@@ -37,20 +39,22 @@ All data related to your usage of Alba is stored **locally on your device** usin
 
 ### Local Processing
 
-All calculations and features operate entirely within your browser:
+Alba's core calculations and tracking operate entirely within your browser:
 
-- **Impact Calculations:** Energy, carbon, and water estimates are computed locally based on your prompt length, selected model, and configured region
+- **Impact Calculations:** Energy, carbon, and water estimates are computed locally on your device based on your prompt length, selected model, and configured region — they are never sent anywhere
 - **Local Optimization:** Basic prompt optimization happens entirely on your device without sending data anywhere
 - **Dashboard and Tracking:** All statistics and visualizations are generated from locally stored data
 
 ### Optional AI-Powered Features
 
-Alba offers optional AI-powered prompt optimization that uses Azure's AI Models service:
+Alba offers two optional AI-powered features — the AI prompt optimizer and the Eco Wrapped recap. **No API keys or tokens are stored in or shipped with the extension.** When these features are used, requests are sent to the Alba proxy (a Cloudflare Worker at `https://alba-ai-proxy.lindsaygross32.workers.dev`), which holds the AI provider credential as a server-side secret and forwards the request to GitHub Models for processing:
 
-- **Opt-In Only:** This feature is disabled by default and requires your explicit consent to enable
-- **When Enabled:** Your prompt text is sent to Azure AI Models API (models.inference.ai.azure.com) for advanced optimization suggestions
-- **Your Control:** You can enable or disable this feature at any time in the extension settings
-- **Third-Party Privacy:** When using this feature, Microsoft Azure's privacy policy applies to data sent to their API
+- **Opt-In Only:** AI optimization is disabled by default and requires your explicit consent to enable; the Eco Wrapped recap is generated only when you request it
+- **AI Optimizer — What Is Sent:** Only the prompt text you choose to optimize is sent to the Alba proxy and forwarded to GitHub Models for a compressed rewrite suggestion
+- **Eco Wrapped — What Is Sent:** Only your daily usage totals (aggregate energy, carbon, and water numbers) are sent to the Alba proxy and forwarded to GitHub Models to generate the recap copy — never your prompts or conversations
+- **No Keys in the Extension:** The AI provider token lives only as a secret on the proxy server; it is never embedded in, downloaded by, or exposed through the extension
+- **Your Control:** You can enable or disable AI optimization at any time in the extension settings, and Eco Wrapped only runs on demand. If the proxy is unreachable, Alba falls back to local-only behavior
+- **Third-Party Privacy:** GitHub's and Microsoft Azure's privacy policies apply to data processed by GitHub Models via the proxy
 
 ## Data You Control
 
@@ -72,12 +76,14 @@ You have complete control over your data:
 
 ## Third-Party Services
 
-### Azure AI Models API (Optional)
+### Alba Proxy → GitHub Models (Optional)
 
-If you enable AI-powered optimization:
-- Your prompts are sent to Azure AI Models API (models.inference.ai.azure.com) for processing
-- Microsoft Azure's privacy policy and terms of service apply
-- You can disable this feature at any time
+If you use the AI optimizer or Eco Wrapped:
+- Requests are sent to the Alba proxy (`https://alba-ai-proxy.lindsaygross32.workers.dev`), which forwards them to GitHub Models for processing
+- The AI optimizer sends only the prompt text you optimize; Eco Wrapped sends only your daily usage totals — neither sends your conversations
+- The proxy holds the AI provider credential as a server-side secret; no key is stored in the extension
+- GitHub's and Microsoft Azure's privacy policies and terms of service apply to the forwarded data
+- You can disable the AI optimizer at any time, and Eco Wrapped only runs when you request it
 
 ### No Other Third Parties
 
@@ -88,7 +94,7 @@ Alba does not integrate with any analytics services, advertising networks, or ot
 Alba requests only the permissions necessary for its functionality:
 
 - **Storage:** To save your preferences and usage data locally on your device
-- **Host Permission (Azure AI):** Access to Azure AI Models API (models.inference.ai.azure.com) to enable optional AI-powered prompt optimization when you choose to use this feature
+- **Host Permission (Alba Proxy):** Access to the Alba proxy (`https://alba-ai-proxy.lindsaygross32.workers.dev`) to enable the optional AI optimizer and Eco Wrapped recap when you choose to use them. The extension does not contact GitHub Models directly
 - **Content Scripts:** Permission to run on specific AI chat websites (ChatGPT, Claude, Gemini, Perplexity) to inject the impact tracking interface
 
 These permissions are used solely for the stated functionality and not for data collection or tracking. The content scripts only interact with the visible web pages you're using to display impact estimates and optimization suggestions.

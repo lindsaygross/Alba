@@ -33,7 +33,12 @@
     {
       id: 'claude',
       hostPattern: /claude\.ai$/,
-      promptSelectors: ['textarea', 'div[contenteditable="true"][data-tracker="chat-input"]'],
+      promptSelectors: [
+        'div.ProseMirror[contenteditable="true"]',
+        'div[contenteditable="true"][role="textbox"]',
+        'div[contenteditable="true"]',
+        'textarea'
+      ],
       sendButtonSelectors: ['button[type="submit"]', 'button[aria-label*="Send"]'],
       assistantSelectors: [
         'main div[class*="assistant"]',
@@ -248,6 +253,7 @@
     state.analyzerObserver = new MutationObserver(() => {
       cleanupDetachedControllers();
       attachAnalyzerToExistingPrompts();
+      ensureWidget();
     });
     state.analyzerObserver.observe(document.body, { childList: true, subtree: true });
   }
@@ -306,12 +312,25 @@
 
     const form = editableTarget.closest('form');
     const parent = form || editableTarget.parentElement;
-    const target = parent || editableTarget;
-    // Insert after the form/parent so the bar isn't clipped by overflow:hidden
-    if (target.parentElement) {
-      target.parentElement.insertBefore(controller.container, target.nextSibling);
+    // Climb out of flex/grid/inline parents so a full-width bar stacks directly
+    // under the composer (block context) instead of becoming a flex/grid row item
+    // that steals the row's width/height (squeezing Perplexity / overlapping Gemini).
+    // When the immediate parent is already block-level (e.g. ChatGPT) nothing is
+    // climbed, so that working insertion point is preserved.
+    let anchor = parent || editableTarget;
+    while (anchor.parentElement && anchor.parentElement !== document.body) {
+      const parentDisplay = window.getComputedStyle(anchor.parentElement).display;
+      if (/(flex|grid|inline)/.test(parentDisplay)) {
+        anchor = anchor.parentElement;
+      } else {
+        break;
+      }
+    }
+    // Insert after the anchor so the bar isn't clipped by overflow:hidden
+    if (anchor.parentElement) {
+      anchor.parentElement.insertBefore(controller.container, anchor.nextSibling);
     } else {
-      target.appendChild(controller.container);
+      anchor.appendChild(controller.container);
     }
 
     const listener = () => {
@@ -651,6 +670,15 @@
       [ALBA_STORAGE_KEYS.history]: state.history
     });
     renderWidgetTotals();
+  }
+
+  function ensureWidget() {
+    // SPA re-renders can detach the floating widget; recreate it when missing.
+    // Guarded so we never spawn a second widget. createFloatingWidget preserves
+    // the active tab, and totals live in state/storage, so recreation is safe.
+    if (!state.settings.enabled) return;
+    if (state.widget?.root?.isConnected) return;
+    createFloatingWidget();
   }
 
   function createFloatingWidget() {

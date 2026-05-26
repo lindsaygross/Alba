@@ -1,17 +1,29 @@
 /**
- * Alba AI Client - Direct GitHub Models Integration
+ * Alba AI Client - Server-Proxied GitHub Models Integration
  *
- * Calls GitHub Models API directly from the extension.
- * PAT is injected at build time via GitHub Actions.
+ * The GitHub Models token is NOT in the extension. All AI calls go to a
+ * server-side proxy (a Cloudflare Worker — see proxy/) that holds the token as
+ * a server secret and forwards to GitHub Models. No secret ships to users.
+ *
+ * The system prompts and model selection also live in the worker, so this file
+ * only knows how to ask for two constrained tasks: "optimize" and "wrapped".
  */
 
-// Placeholder replaced at build time - DO NOT COMMIT ACTUAL TOKEN
-const GITHUB_TOKEN = '__GITHUB_TOKEN__';
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURE ME — deployed proxy URL (see proxy/README.md to deploy the worker).
+// Replace the placeholder below with your real worker URL, e.g.
+//   https://alba-ai-proxy.<your-subdomain>.workers.dev
+// ─────────────────────────────────────────────────────────────────────────────
+const PROXY_URL = 'https://alba-ai-proxy.lindsaygross32.workers.dev';
+// LOCAL TESTING: comment out the line above and use this against `wrangler dev`:
+// const PROXY_URL = 'http://127.0.0.1:8787';
 
-const GITHUB_MODELS_URL = 'https://models.inference.ai.azure.com/chat/completions';
-const MODEL_ID = 'gpt-4o-mini';
+// If PROXY_URL still contains this marker, the proxy is treated as unconfigured
+// and the extension silently falls back to local-only behavior.
+const PROXY_PLACEHOLDER = 'YOUR-PROXY.example';
 
-// Simple rate limiter: max calls per minute
+// Simple client-side rate limiter: max calls per minute (avoids hammering the
+// proxy; the worker also rate-limits independently).
 const RATE_LIMIT = { maxPerMinute: 10, calls: [], blocked: false };
 
 function checkRateLimit() {
@@ -24,119 +36,60 @@ function checkRateLimit() {
   return true;
 }
 
-const OPTIMIZER_SYSTEM = `You are an expert prompt engineer. You compress prompts to use minimum tokens. Keep EXACT same meaning but remove ALL unnecessary words.
-
-RULES:
-1. Strip politeness: please, kindly, could you, would you, can you → DELETE
-2. Strip filler: really, very, just, actually, basically → DELETE
-3. Simplify actions: "help me write" → "write", "I want to" → "", "I need" → ""
-4. Direct commands only: "Explain how X works" → "Explain X"
-5. No meta-requests: "write a prompt that" → just the actual request
-
-EXAMPLES:
-Input: "Please help me write a Python function"
-Output: "Python function"
-
-Input: "Could you kindly explain machine learning to me?"
-Output: "Explain machine learning"
-
-Input: "I want to learn how to code in JavaScript"
-Output: "Learn JavaScript"
-
-CRITICAL: Output ONLY the compressed version. Nothing else.`;
-
-const WRAPPED_SYSTEM = `You are Alba's climate storyteller. Given daily energy (Wh), carbon (gCO2), and water (mL) totals from AI usage plus estimated savings, craft a recap that celebrates resources avoided. Respond ONLY with JSON matching this schema:
-{
-  "headline": string,
-  "subhead": string,
-  "cards": [
-    {
-      "title": string,
-      "statLabel": string,
-      "statValue": string,
-      "analogy": string,
-      "tip": string
-    }
-  ],
-  "cta": string,
-  "footnote": string
-}
-
-Guidelines:
-- Tone: upbeat, funky, funny, climate-savvy, confident, 1-2 sentences per field.
-- Analogy: mix home energy, public transit, hydration, nature, and household objects.
-- Use the provided savings.* values for statValue + analogy; mention totals.* only for context.
-- Keep numbers realistic. Convert units when it improves clarity.
-- Limit cards to 3 entries.`;
-
 /**
- * Check if the AI client is configured (has a valid token)
+ * Check if the AI client is configured (PROXY_URL points at a real proxy).
  */
 function isConfigured() {
-  return GITHUB_TOKEN && GITHUB_TOKEN !== '__GITHUB_TOKEN__' && GITHUB_TOKEN.length > 10;
+  return (
+    typeof PROXY_URL === 'string' &&
+    /^https?:\/\//.test(PROXY_URL) &&
+    !PROXY_URL.includes(PROXY_PLACEHOLDER)
+  );
 }
 
 /**
- * Call GitHub Models API
+ * POST a constrained request to the proxy. Returns the completion text, or null
+ * on any failure (so callers can degrade gracefully). Never throws.
  */
-async function callGitHubModels(systemPrompt, userMessage, options = {}) {
+async function callProxy(mode, fields) {
   if (!isConfigured()) {
-    console.warn('[Alba] GitHub token not configured');
+    console.warn('[Alba] Proxy URL not configured; skipping AI call');
     return null;
   }
 
   if (!checkRateLimit()) {
-    console.warn('[Alba] Rate limit exceeded, skipping API call');
+    console.warn('[Alba] Rate limit exceeded, skipping proxy call');
     return null;
   }
 
-  const { temperature = 0.7, maxTokens = 500 } = options;
-
   try {
-    const response = await fetch(GITHUB_MODELS_URL, {
+    const response = await fetch(PROXY_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${GITHUB_TOKEN}`
-      },
-      body: JSON.stringify({
-        model: MODEL_ID,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        temperature,
-        max_tokens: maxTokens
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, ...fields })
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[Alba] GitHub Models API error:', response.status, errorText);
+      console.error('[Alba] Proxy error:', response.status);
       return null;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
+    const text = data?.text;
+    return typeof text === 'string' && text.trim() ? text.trim() : null;
   } catch (err) {
-    console.error('[Alba] GitHub Models request failed:', err);
+    console.error('[Alba] Proxy request failed:', err);
     return null;
   }
 }
 
 /**
- * Optimize a prompt using AI
+ * Optimize a prompt via the proxy. Returns the optimized text, or null on
+ * failure (content.js then falls back to its local optimizer).
  */
 async function optimizePrompt(prompt) {
   if (!prompt?.trim()) return null;
-
-  const result = await callGitHubModels(
-    OPTIMIZER_SYSTEM,
-    `Original prompt: ${prompt}`,
-    { temperature: 0.25, maxTokens: 200 }
-  );
-
-  return result;
+  return callProxy('optimize', { prompt });
 }
 
 /**
@@ -230,7 +183,7 @@ function buildFallbackWrapped(totals, savings, dateLabel) {
 }
 
 /**
- * Generate wrapped summary using AI
+ * Generate wrapped summary via the proxy, with local fallback.
  */
 async function generateWrappedSummary(totals, dateLabel, settings = {}) {
   const metrics = {
@@ -240,18 +193,14 @@ async function generateWrappedSummary(totals, dateLabel, settings = {}) {
   };
   const savings = estimateSavingsFromUsage(metrics, settings);
 
-  // If AI not configured, return fallback immediately
+  // If proxy not configured, return fallback immediately
   if (!isConfigured()) {
     return buildFallbackWrapped(metrics, savings, dateLabel);
   }
 
-  const promptPayload = JSON.stringify({ dateLabel, totals: metrics, savings });
-
-  const result = await callGitHubModels(
-    WRAPPED_SYSTEM,
-    `Create the recap for: ${promptPayload}`,
-    { temperature: 0.9, maxTokens: 600 }
-  );
+  const result = await callProxy('wrapped', {
+    payload: { dateLabel, totals: metrics, savings }
+  });
 
   if (result) {
     const parsed = extractJson(result);
@@ -260,11 +209,11 @@ async function generateWrappedSummary(totals, dateLabel, settings = {}) {
     }
   }
 
-  // Fallback if AI fails
+  // Fallback if proxy fails or returns unparseable content
   return buildFallbackWrapped(metrics, savings, dateLabel);
 }
 
-// Export for use in content.js
+// Export for use in content.js (contract unchanged)
 globalThis.ALBA_AI_CLIENT = {
   isConfigured,
   optimizePrompt,
