@@ -23,8 +23,8 @@ jobs:
         run: npm ci
 
       - name: Build extension
-        env:
-          GITHUB_TOKEN: ${{ secrets.BUILD_CACHE }}
+        # No secrets at build time: AI calls go through a server-side proxy (see proxy/),
+        # so no token is injected into the shipped extension.
         run: npm run build
 
       - name: Upload extension artifact

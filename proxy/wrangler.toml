@@ -1,0 +1,13 @@
+# Cloudflare Worker config for the Alba AI proxy.
+#
+# The GitHub Models token is NOT stored here. It is a server-side secret:
+#   cd proxy && wrangler secret put GITHUB_MODELS_TOKEN
+#
+# Deploy with:   cd proxy && wrangler deploy
+# Test locally:  cd proxy && wrangler dev   (serves http://127.0.0.1:8787)
+
+name = "alba-ai-proxy"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# No [vars] / secrets in this file — keep the token out of version control.
